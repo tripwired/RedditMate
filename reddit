@@ -1,0 +1,59 @@
+#!/usr/bin/perl
+#TripWired
+
+use HTML::TokeParser;
+use Storable qw(freeze nfreeze thaw);
+use Data::Dumper;
+
+my $username = `whoami`;
+chomp $username;
+
+my $text = $ENV{'TM_SELECTED_TEXT'} || shift @ARGV || "http://www.reddit.com";
+
+print "http://www.reddit.com\t\t\t\n\n";
+
+if ($text) {
+  unless (-d "/Users/$username/.reddit"){
+    system("mkdir /Users/$username/.reddit");
+  }
+  unless (-f "/Users/$username/.reddit/reddit_cache"){
+    system("touch /Users/$username/.reddit");
+  }
+  
+  my @cache;
+  if($text =~ m/^http:\/\/www\.reddit\.com$/){
+    my $reddit = `curl --silent $text`;
+    my $parser = HTML::TokeParser->new(\$reddit);
+    my $entry = 0;
+    while(my $token = $parser->get_token)
+    {
+      my $ttype = shift @{$token};
+      if($ttype eq "S") {
+        
+        my($tag, $attr, $attrseq, $rawtxt) = @{$token};
+        
+        if($tag eq "a") {
+          if($attr->{"class"} =~ m/title/){
+            $entry = {"title" => $parser->get_trimmed_text("/$tag"), "link" => $attr->{'href'}};
+          } elsif ($attr->{"class"} =~ m/comments/ and $entry){
+            $entry->{comments} = $attr->{'href'};
+            push(@cache, $entry);
+            $entry = 0;
+          }
+        }
+      }
+    }
+  }  elsif($text =~ m/^http:\/\/www\.reddit\.com\/r\/comments\//){
+    
+  } elsif($text =~ m/^http:\/\/\w*\.imgur\.com\/(\w*\.\w{3})/){
+    my $imgur = `curl --silent -o /Users/$username/.reddit/$1 $text`;
+    my $out = `/Applications/Preview.app/Contents/MacOS/Preview /Users/$username/.reddit/$1`;
+  } else {
+    print "This type of page is unsupported\n";
+  }
+  
+  print Dumper(\@cache);
+  #open FILE, "+>>", "/Users/$username/.reddit/reddit_cache" or die $!;
+  #print FILE freeze(\@cache) . "\n";
+  #close FILE;
+}
